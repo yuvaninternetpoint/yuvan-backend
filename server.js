@@ -1,31 +1,36 @@
-// ✅ Final Secure server.js for Render + MongoDB
+// server.js — Final stable version with MongoDB & Render ready
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
-require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ✅ Allow your frontend (on Render)
-app.use(cors({
-  origin: ["https://yuvan-frontend.onrender.com"],
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
-
+// --- Middleware ---
 app.use(express.json());
+app.use(
+  cors({
+    origin: [
+      "https://yuvan-frontend.onrender.com",
+      "https://yuvankaushik.neocities.org"
+    ],
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
+  })
+);
 
-// ✅ MongoDB connection
-const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://<your_mongodb_connection_string>";
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log("✅ MongoDB connected successfully"))
-.catch((err) => console.error("❌ MongoDB connection failed:", err));
+// --- MongoDB Connection ---
+const MONGO_URI =
+  process.env.MONGODB_URI ||
+  "mongodb+srv://<your-username>:<your-password>@cluster0.mongodb.net/yuvanDB?retryWrites=true&w=majority";
 
-// ✅ Define User Schema
+mongoose
+  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("✅ MongoDB connected successfully"))
+  .catch((err) => console.error("❌ MongoDB connection error:", err));
+
+// --- Schemas ---
 const userSchema = new mongoose.Schema({
   email: String,
   password: String,
@@ -34,50 +39,47 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema);
 
-// ✅ Root route
+// --- Routes ---
 app.get("/", (req, res) => {
-  res.json({ message: "✅ Yuvan Backend is running fine!" });
+  res.send("Backend working fine ✅");
 });
 
-// ✅ Signup Route
-app.post("/api/signup", async (req, res) => {
-  const { email, password } = req.body;
+app.post("/api/login", async (req, res) => {
   try {
-    const existing = await User.findOne({ email });
-    if (existing) {
-      return res.status(400).json({ message: "User already exists" });
+    const { email, password } = req.body;
+
+    // ✅ Admin login (environment-based)
+    if (
+      email === process.env.ADMIN_EMAIL &&
+      password === process.env.ADMIN_PASS
+    ) {
+      return res.json({ success: true, role: "admin" });
     }
+
+    // ✅ Normal user login
+    const user = await User.findOne({ email, password });
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+
+    res.json({ success: true, role: "user" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/api/signup", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(400).json({ error: "User already exists" });
+
     const newUser = new User({ email, password });
     await newUser.save();
-    res.json({ message: "Signup successful" });
+    res.json({ success: true, message: "User registered successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Server error during signup" });
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// ✅ Login Route
-app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email, password });
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-
-    if (user.role === "admin") {
-      return res.json({ message: "Admin login successful", role: "admin" });
-    } else {
-      return res.json({ message: "User login successful", role: "user" });
-    }
-  } catch (err) {
-    res.status(500).json({ message: "Server error during login" });
-  }
-});
-
-// ✅ Admin check route
-app.get("/api/admin", (req, res) => {
-  res.json({ message: "Admin panel active" });
-});
-
-// ✅ Start Server
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
