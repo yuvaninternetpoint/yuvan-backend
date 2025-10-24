@@ -1,110 +1,118 @@
-// server.js — final working version for Render + Neocities
+// server.js
 const express = require("express");
+const mongoose = require("mongoose");
 const cors = require("cors");
-const { Low } = require("lowdb");
-const { JSONFile } = require("lowdb/node");
-const path = require("path");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
-// Admin credentials (stored safely in Render Environment)
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
-const ADMIN_PASS = process.env.ADMIN_PASS || "";
-
-// ✅ CORS configuration — allows Neocities and local testing
+// ✅ Allow requests from your frontend
 app.use(cors({
   origin: [
-    "https://yuvankaushik.neocities.org",
-    "http://localhost:5500"
+    "https://yuvan-frontend.onrender.com",  // Render frontend
+    "http://localhost:3000"                 // Local testing
   ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
-  credentials: false
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 
 app.use(express.json());
 
-// ==================== Database setup ====================
-const DB_FILE = path.join(__dirname, "db.json");
-const adapter = new JSONFile(DB_FILE);
-const db = new Low(adapter, { users: [], bills: [] });
+// ✅ MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI || "mongodb+srv://<your_mongo_connection_string>", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log("✅ MongoDB Connected"))
+.catch(err => console.error("❌ MongoDB Connection Error:", err));
 
-async function initDB() {
-  await db.read();
-  db.data ||= { users: [], bills: [] };
-  await db.write();
-}
-initDB();
-
-// ==================== Root route ====================
-app.get("/", (req, res) => {
-  res.send("✅ Yuvan backend is running successfully and ready to serve requests!");
+// ✅ User Schema
+const userSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ["admin", "user"], default: "user" }
 });
 
-// ==================== API ROUTES ====================
+const User = mongoose.model("User", userSchema);
 
-// Signup
-app.post("/api/signup", async (req, res) => {
-  const { name, email, pass } = req.body;
-  if (!name || !email || !pass)
-    return res.status(400).json({ error: "All fields required" });
+// ✅ Middleware for authentication
+function auth(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "Unauthorized" });
 
-  await db.read();
-  const exists = db.data.users.find((u) => u.email === email);
-  if (exists) return res.status(400).json({ error: "User already exists" });
-
-  db.data.users.push({ name, email, pass, role: "user" });
-  await db.write();
-  res.json({ message: "Signup successful" });
-});
-
-// Login
-app.post("/api/login", async (req, res) => {
-  const { email, pass } = req.body;
-  if (!email || !pass)
-    return res.status(400).json({ error: "Missing credentials" });
-
-  // Admin login (Render env vars)
-  if (ADMIN_EMAIL && ADMIN_PASS && email === ADMIN_EMAIL && pass === ADMIN_PASS) {
-    return res.json({ session: { role: "admin", email } });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    res.status(403).json({ message: "Invalid token" });
   }
+}
 
-  await db.read();
-  const user = db.data.users.find((u) => u.email === email && u.pass === pass);
-  if (!user) return res.status(401).json({ error: "Invalid credentials" });
-
-  res.json({ session: { role: user.role, email: user.email } });
+// ✅ Default route
+app.get("/", (req, res) => {
+  res.send("✅ Backend running fine on Render!");
 });
 
-// Customers
-app.get("/api/customers", async (req, res) => {
-  await db.read();
-  res.json(db.data.users);
+// ✅ Signup Route
+app.post("/api/signup", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) return res.status(400).json({ message: "All fields required" });
+
+    const existing = await User.findOne({ email });
+    if (existing) return res.status(400).json({ message: "User already exists" });
+
+    const hashed = await bcrypt.hash(password, 10);
+    const role = email === "yuvan.internetpoint@gmail.com" ? "admin" : "user";
+
+    const user = new User({ email, password: hashed, role });
+    await user.save();
+
+    res.json({ message: "Signup successful" });
+  } catch (error) {
+    res.status(500).json({ message: "Signup failed", error: error.message });
+  }
 });
 
-// Bills
-app.get("/api/bills", async (req, res) => {
-  await db.read();
-  const { customer } = req.query;
-  let bills = db.data.bills;
-  if (customer) bills = bills.filter((b) => b.customer === customer);
-  res.json(bills);
+// ✅ Login Route
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "Invalid credentials" });
+
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(400).json({ message: "Invalid credentials" });
+
+    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "1d" });
+
+    res.json({
+      message: "Login successful",
+      token,
+      role: user.role
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Login failed", error: error.message });
+  }
 });
 
-app.get("/api/bills/:id", async (req, res) => {
-  await db.read();
-  const bill = db.data.bills.find((b) => b.id === req.params.id);
-  if (!bill) return res.status(404).json({ error: "Bill not found" });
-  res.json(bill);
+// ✅ Protected Admin Route
+app.get("/api/admin", auth, (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).json({ message: "Access denied" });
+  res.json({ message: "Welcome to Admin Panel" });
 });
 
-// Default handler for unknown routes
-app.use((req, res) => {
-  res.status(404).json({ error: "Route not found" });
+// ✅ Protected User Dashboard
+app.get("/api/dashboard", auth, (req, res) => {
+  res.json({ message: `Welcome ${req.user.email}, your role is ${req.user.role}` });
 });
 
-// ==================== Start server ====================
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+// ✅ Start Server
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
