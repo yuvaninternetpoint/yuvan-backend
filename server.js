@@ -1,3 +1,4 @@
+// server.js (final secure version)
 const express = require("express");
 const cors = require("cors");
 const { Low } = require("lowdb");
@@ -7,8 +8,21 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// ✅ Admin credentials are now stored in environment variables (Render settings)
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
+const ADMIN_PASS = process.env.ADMIN_PASS || "";
+
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://yuvankaushik.neocities.org", // your frontend URL
+      "http://localhost:5500",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Database setup
@@ -34,7 +48,8 @@ app.get("/", (req, res) => {
 // Signup
 app.post("/api/signup", async (req, res) => {
   const { name, email, pass } = req.body;
-  if (!name || !email || !pass) return res.status(400).json({ error: "All fields required" });
+  if (!name || !email || !pass)
+    return res.status(400).json({ error: "All fields required" });
 
   const exists = db.data.users.find((u) => u.email === email);
   if (exists) return res.status(400).json({ error: "User already exists" });
@@ -44,15 +59,18 @@ app.post("/api/signup", async (req, res) => {
   res.json({ message: "Signup successful" });
 });
 
-// Login
+// Login (secure with env vars)
 app.post("/api/login", async (req, res) => {
   const { email, pass } = req.body;
+  if (!email || !pass)
+    return res.status(400).json({ error: "Missing credentials" });
 
-  // Admin login
-  if (email === "Yuvaninternetpoint@gmail.com" && pass === "202212") {
+  // ✅ Admin login (from Render environment)
+  if (ADMIN_EMAIL && ADMIN_PASS && email === ADMIN_EMAIL && pass === ADMIN_PASS) {
     return res.json({ session: { role: "admin", email } });
   }
 
+  // Normal user login
   const user = db.data.users.find((u) => u.email === email && u.pass === pass);
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
