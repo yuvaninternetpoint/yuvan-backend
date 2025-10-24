@@ -13,17 +13,13 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASS = process.env.ADMIN_PASS || "";
 
 // Middleware
-app.use(
-  cors({
-    origin: [
-      "https://yuvankaushik.neocities.org", // your frontend URL
-      "http://localhost:5500",
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: ["https://yuvankaushik.neocities.org"],  // allow your frontend
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
 app.use(express.json());
+
 
 // Database setup
 const DB_FILE = path.join(__dirname, "db.json");
