@@ -1,4 +1,4 @@
-// server.js (final secure version)
+// server.js — final working version for Render + Neocities
 const express = require("express");
 const cors = require("cors");
 const { Low } = require("lowdb");
@@ -8,25 +8,28 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ✅ Admin credentials are now stored in environment variables (Render settings)
+// Admin credentials (stored safely in Render Environment)
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASS = process.env.ADMIN_PASS || "";
 
-// Middleware
+// ✅ CORS configuration — allows Neocities and local testing
 app.use(cors({
-  origin: ["https://yuvankaushik.neocities.org"],  // allow your frontend
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
+  origin: [
+    "https://yuvankaushik.neocities.org",
+    "http://localhost:5500"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type"],
+  credentials: false
 }));
+
 app.use(express.json());
 
-
-// Database setup
+// ==================== Database setup ====================
 const DB_FILE = path.join(__dirname, "db.json");
 const adapter = new JSONFile(DB_FILE);
 const db = new Low(adapter, { users: [], bills: [] });
 
-// Initialize DB
 async function initDB() {
   await db.read();
   db.data ||= { users: [], bills: [] };
@@ -34,12 +37,12 @@ async function initDB() {
 }
 initDB();
 
-// Root route
+// ==================== Root route ====================
 app.get("/", (req, res) => {
-  res.send("✅ Yuvan backend is running successfully!");
+  res.send("✅ Yuvan backend is running successfully and ready to serve requests!");
 });
 
-// ========================== API ROUTES =============================== //
+// ==================== API ROUTES ====================
 
 // Signup
 app.post("/api/signup", async (req, res) => {
@@ -47,6 +50,7 @@ app.post("/api/signup", async (req, res) => {
   if (!name || !email || !pass)
     return res.status(400).json({ error: "All fields required" });
 
+  await db.read();
   const exists = db.data.users.find((u) => u.email === email);
   if (exists) return res.status(400).json({ error: "User already exists" });
 
@@ -55,31 +59,31 @@ app.post("/api/signup", async (req, res) => {
   res.json({ message: "Signup successful" });
 });
 
-// Login (secure with env vars)
+// Login
 app.post("/api/login", async (req, res) => {
   const { email, pass } = req.body;
   if (!email || !pass)
     return res.status(400).json({ error: "Missing credentials" });
 
-  // ✅ Admin login (from Render environment)
+  // Admin login (Render env vars)
   if (ADMIN_EMAIL && ADMIN_PASS && email === ADMIN_EMAIL && pass === ADMIN_PASS) {
     return res.json({ session: { role: "admin", email } });
   }
 
-  // Normal user login
+  await db.read();
   const user = db.data.users.find((u) => u.email === email && u.pass === pass);
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
   res.json({ session: { role: user.role, email: user.email } });
 });
 
-// Get customers
+// Customers
 app.get("/api/customers", async (req, res) => {
   await db.read();
   res.json(db.data.users);
 });
 
-// Get all bills
+// Bills
 app.get("/api/bills", async (req, res) => {
   await db.read();
   const { customer } = req.query;
@@ -88,7 +92,6 @@ app.get("/api/bills", async (req, res) => {
   res.json(bills);
 });
 
-// Get a specific bill by ID
 app.get("/api/bills/:id", async (req, res) => {
   await db.read();
   const bill = db.data.bills.find((b) => b.id === req.params.id);
@@ -96,8 +99,12 @@ app.get("/api/bills/:id", async (req, res) => {
   res.json(bill);
 });
 
-// ===================================================================== //
+// Default handler for unknown routes
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
 
+// ==================== Start server ====================
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
