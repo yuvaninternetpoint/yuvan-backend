@@ -16,8 +16,7 @@ app.use(cors({
 // ------------------------
 // MongoDB Connection
 // ------------------------
-const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://mongodb+srv://yuvaninternetpoint@gmail.com:202212@cluster0.mongodb.net/yuvanDB
-";
+const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://<your_mongo_connection_string>";
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
