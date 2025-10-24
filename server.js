@@ -1,85 +1,39 @@
-// server.js — Final stable version with MongoDB & Render ready
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
+// server.js
+import express from "express";
+import mongoose from "mongoose";
+import cors from "cors";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// --- Middleware ---
+// Middleware
+app.use(cors());
 app.use(express.json());
-app.use(
-  cors({
-    origin: [
-      "https://yuvan-frontend.onrender.com",
-      "https://yuvankaushik.neocities.org"
-    ],
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"],
-  })
-);
 
-// --- MongoDB Connection ---
-const MONGO_URI =
+// MongoDB Connection
+const mongoURI =
   process.env.MONGODB_URI ||
-  "mongodb+srv://<your-username>:<your-password>@cluster0.mongodb.net/yuvanDB?retryWrites=true&w=majority";
+  "mongodb+srv://<username>:<password>@<cluster-name>.mongodb.net/<database>?retryWrites=true&w=majority";
 
 mongoose
-  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("✅ MongoDB connected successfully"))
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+  .catch((err) => console.error("❌ MongoDB connection error:", err.message));
 
-// --- Schemas ---
-const userSchema = new mongoose.Schema({
-  email: String,
-  password: String,
-  role: { type: String, default: "user" },
-});
-
-const User = mongoose.model("User", userSchema);
-
-// --- Routes ---
+// Test route
 app.get("/", (req, res) => {
-  res.send("Backend working fine ✅");
+  res.send("✅ Backend working perfectly!");
 });
 
-app.post("/api/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // ✅ Admin login (environment-based)
-    if (
-      email === process.env.ADMIN_EMAIL &&
-      password === process.env.ADMIN_PASS
-    ) {
-      return res.json({ success: true, role: "admin" });
-    }
-
-    // ✅ Normal user login
-    const user = await User.findOne({ email, password });
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
-
-    res.json({ success: true, role: "user" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
+// Example API route
+app.post("/api/login", (req, res) => {
+  res.json({ message: "Login endpoint working!" });
 });
 
-app.post("/api/signup", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const exists = await User.findOne({ email });
-    if (exists) return res.status(400).json({ error: "User already exists" });
-
-    const newUser = new User({ email, password });
-    await newUser.save();
-    res.json({ success: true, message: "User registered successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
-
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
